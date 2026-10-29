@@ -1,0 +1,12 @@
+{
+  "domain": "myppc_local",
+  "name": "myPPC (McG)",
+  "version": "0.1.0",
+  "config_flow": true,
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "requirements": ["selenium==4.38.0"],
+  "documentation": "https://github.com/McG04/myppc-mcg-home-assistant",
+  "issue_tracker": "https://github.com/McG04/myppc-mcg-home-assistant/issues",
+  "codeowners": ["@McG04"]
+}

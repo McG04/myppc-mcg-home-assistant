@@ -1,0 +1,7 @@
+{
+  "config": {
+    "step": {"user": {"title": "Conectare myPPC", "description": "Integrarea păstrează local datele de conectare. Verifică portalul o dată la 24 de ore. Prima pornire pregătește browserul intern și poate dura câteva minute. Codul de plată este opțional dacă există un singur loc de consum.", "data": {"username": "E-mail sau telefon (+40)", "password": "Parolă myPPC", "payment_code": "Cod de plată (opțional)"}}},
+    "error": {"invalid_auth": "Completează utilizatorul și parola", "invalid_code": "Codul de plată trebuie să conțină numai cifre"},
+    "abort": {"already_configured": "Contul este deja configurat", "reauth_successful": "Datele au fost actualizate"}
+  }
+}
