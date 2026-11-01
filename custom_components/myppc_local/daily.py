@@ -1,11 +1,14 @@
 """Persist check diagnostics; scheduling belongs to HA's coordinator."""
 import json
 import time
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 
 class DailyGate:
-    def __init__(self, path, payment_code):
+    def __init__(self, path, payment_code, time_zone="Europe/Bucharest"):
+        self.time_zone = ZoneInfo(time_zone)
         self.path = Path(path)
         self.payment_code = payment_code
         self.last_attempt = None
@@ -23,7 +26,11 @@ class DailyGate:
     def reserve(self, now=None):
         now = time.time() if now is None else now
         self.last_attempt = now
-        self.next_check = now + 86400
+        local = datetime.fromtimestamp(now, self.time_zone)
+        next_check = local.replace(hour=8, minute=0, second=0, microsecond=0)
+        if next_check <= local:
+            next_check += timedelta(days=1)
+        self.next_check = next_check.timestamp()
         self.set_status('collection_failed')
         return True
 

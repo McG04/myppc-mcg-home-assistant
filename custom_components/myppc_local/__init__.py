@@ -1,10 +1,10 @@
 """Native HA integration with one daily portal check and an internal login browser."""
-from datetime import timedelta
 import json
 import logging
 from pathlib import Path
 import threading
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from .daily import DailyGate
 from .portal import Portal, LoginRequired
@@ -16,25 +16,36 @@ _LOGGER = logging.getLogger(__name__)
 
 class Coordinator(DataUpdateCoordinator):
     def __init__(self, hass, entry):
-        super().__init__(hass, _LOGGER, name='myPPC', update_interval=timedelta(days=1))
+        super().__init__(hass, _LOGGER, name='myPPC', update_interval=None)
         self.entry = entry
         self.directory = Path(hass.config.path('.storage', DOMAIN, entry.entry_id))
         self.runtime = Path(hass.config.path('.storage', DOMAIN, 'runtime'))
         self.lock = threading.Lock()
 
+    def load_cache(self):
+        """Restore saved readings without logging into PPC on every HA restart."""
+        try:
+            data = json.loads((self.directory / 'history.json').read_text())
+        except (OSError, ValueError):
+            return None
+        return data if isinstance(data, dict) and data.get('updated_at') else None
+
+    async def async_daily_refresh(self, now):
+        """One fresh login and collection at 08:00 in HA's local timezone."""
+        await self.async_refresh()
+
     def _blocking_update(self):
         with self.lock:
             self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-            gate = DailyGate(self.directory / 'schedule.json', self.entry.unique_id)
+            gate = DailyGate(self.directory / 'schedule.json', self.entry.unique_id, self.hass.config.time_zone)
             cache = self.directory / 'history.json'
             previous = None
             try:
                 previous = json.loads(cache.read_text())
             except (OSError, ValueError):
                 pass
-            # The coordinator schedules normal collection once per day.  This
-            # state is diagnostic only: it must not block a manual reload or a
-            # retry after an error.
+            # HA's local clock listener schedules collection at 08:00.
+            # This file records diagnostics only; it does not schedule retries.
             browser_binaries(self.runtime)
             gate.reserve()
             try:
@@ -75,9 +86,17 @@ class Coordinator(DataUpdateCoordinator):
 
 async def async_setup_entry(hass, entry):
     coordinator = Coordinator(hass, entry)
-    await coordinator.async_config_entry_first_refresh()
+    cached = await hass.async_add_executor_job(coordinator.load_cache)
+    if cached is None:
+        # First installation needs an initial reading to create the sensors.
+        await coordinator.async_config_entry_first_refresh()
+    else:
+        coordinator.async_set_updated_data(cached)
     hass.data.setdefault(DOMAIN,{})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry,['sensor'])
+    entry.async_on_unload(async_track_time_change(
+        hass, coordinator.async_daily_refresh, hour=8, minute=0, second=0
+    ))
     return True
 
 

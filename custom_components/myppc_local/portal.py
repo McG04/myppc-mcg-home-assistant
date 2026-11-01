@@ -7,6 +7,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+from selenium.common.exceptions import TimeoutException
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -83,7 +84,7 @@ class Portal:
                     wait.until(lambda d: d.current_url.startswith(ROOT + '/acasa') or
                                bool(d.find_elements(By.CSS_SELECTOR,
                                                     'a[href="/facturi-si-plati"]')))
-                except Exception as exc:
+                except TimeoutException as exc:
                     # A visible challenge is not solved, and the login is not retried.
                     notices = []
                     selectors = ('[role="alert"]', 'mat-error', '.error-message',
@@ -93,21 +94,24 @@ class Portal:
                             text = ' '.join(element.text.split())
                             if element.is_displayed() and text and text not in notices:
                                 notices.append(text[:240])
-                    if not notices:
-                        body = driver.find_element(By.TAG_NAME, 'body').text
-                        keywords = ('eroare', 'parol', 'captcha', 'autentific', 'încearc')
-                        for line in body.splitlines():
-                            text = ' '.join(line.split())
-                            if text and any(word in text.lower() for word in keywords):
-                                if text not in notices:
-                                    notices.append(text[:240])
-                    detail = '; '.join(notices[:2])
-                    message = 'PPC nu a confirmat autentificarea'
-                    if detail:
-                        message += ': ' + detail
-                    else:
-                        message += '; verifică datele sau cerința de securitate'
-                    raise LoginRequired(message) from exc
+                    # A login-page heading or password label does not prove
+                    # rejected credentials. Only explicit credential errors
+                    # require user reauthentication; timeouts stay recoverable.
+                    rejected = ('parolă incorectă', 'parola incorecta',
+                                'parolă greșită', 'parola gresita',
+                                'date de autentificare incorecte',
+                                'invalid credentials', 'incorrect password',
+                                'invalid password')
+                    if any(phrase in notice.lower()
+                           for notice in notices for phrase in rejected):
+                        raise LoginRequired(
+                            'PPC a respins datele de autentificare'
+                        ) from exc
+                    raise PortalError(
+                        'PPC nu a confirmat autentificarea în 40 de secunde; '
+                        'datele salvate sunt păstrate. Următoarea încercare '
+                        'automată este la ora 08:00'
+                    ) from exc
                 for cookie in driver.get_cookies():
                     self.jar.set_cookie(http.cookiejar.Cookie(version=0, name=cookie['name'],
                         value=cookie['value'], port=None, port_specified=False,

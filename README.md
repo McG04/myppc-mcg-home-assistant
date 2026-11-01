@@ -1,4 +1,4 @@
-# myPPC (McG) 0.1.0 — integrare Home Assistant
+# myPPC (McG) 0.2.2 — integrare Home Assistant
 
 Integrare nativă în `custom_components`, fără aplicație/add-on separat, fără
 server, VNC, token API local sau port nou. Utilizatorul și parola sunt păstrate
@@ -6,7 +6,8 @@ server, VNC, token API local sau port nou. Utilizatorul și parola sunt păstrat
 
 ## Funcționare
 
-O dată la 24 de ore, integrarea pornește temporar un browser headless pentru
+Zilnic la **08:00, în fusul orar configurat în Home Assistant**, integrarea
+pornește temporar un browser headless pentru
 autentificarea normală în myPPC. Acesta lasă portalul să execute verificarea
 reCAPTCHA invizibilă obișnuită; nu ocolește verificarea și nu rezolvă provocări.
 După login, citește prin aceeași interfață web de date folosită de portal:
@@ -28,9 +29,18 @@ observată; nu poate distinge corecții ale unor tranzacții perfect identice.
 Browserul este închis după login, iar sesiunea temporară este ștearsă după
 copierea cookie-urilor numai în memoria procesului. Nu ține sesiunea activă
 artificial și nu face trafic PPC între verificările programate. Coordinatorul
-Home Assistant programează o citire pe zi. Nu există o limită rigidă: o
-reîncărcare manuală sau repornirea Home Assistant poate porni imediat o nouă
-citire, inclusiv după o eroare.
+Home Assistant programează o citire pe zi. La repornire/reîncărcare se
+restaurează istoricul salvat, fără o nouă autentificare. Dacă HA este oprit la
+08:00, următoarea citire este în dimineața următoare. Numai prima instalare
+fără istoric face o citire imediată. Erorile temporare nu declanșează
+reautentificarea și nu provoacă încercări repetate în cursul zilei; următoarea
+încercare este la 08:00. Datele vechi sunt păstrate, iar ultima citire reușită
+rămâne vizibilă. O respingere explicită a parolei cere reautentificare.
+
+Un timeout după trimiterea formularului nu înseamnă că sesiunea a expirat.
+Versiunile anterioare clasificau și acest caz drept eroare de autentificare.
+Formularul de reautentificare confirma doar salvarea datelor, fără a valida
+conectarea la PPC.
 
 ## Instalare
 
