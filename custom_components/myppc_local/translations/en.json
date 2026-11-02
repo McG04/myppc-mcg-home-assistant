@@ -1,7 +1,23 @@
 {
   "config": {
-    "step": {"user": {"title": "Conectare myPPC", "description": "Integrarea păstrează local datele de conectare. Se autentifică și citește portalul zilnic la ora 08:00, în fusul orar Home Assistant. Prima pornire pregătește browserul intern și poate dura câteva minute. Codul de plată este opțional dacă există un singur loc de consum.", "data": {"username": "E-mail sau telefon (+40)", "password": "Parolă myPPC", "payment_code": "Cod de plată (opțional)"}}},
-    "error": {"invalid_auth": "Completează utilizatorul și parola", "invalid_code": "Codul de plată trebuie să conțină numai cifre"},
-    "abort": {"already_configured": "Contul este deja configurat", "reauth_successful": "Datele au fost actualizate"}
+    "step": {
+      "user": {
+        "title": "Connect to myPPC",
+        "description": "The integration stores your credentials locally. It signs in and reads the portal daily at 08:00 in the Home Assistant time zone. The first startup prepares the internal browser and may take a few minutes. The payment code is optional if there is only one consumption point.",
+        "data": {
+          "username": "Email or phone (+40)",
+          "password": "myPPC password",
+          "payment_code": "Payment code (optional)"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Enter your username and password",
+      "invalid_code": "The payment code must contain only digits"
+    },
+    "abort": {
+      "already_configured": "The account is already configured",
+      "reauth_successful": "Credentials have been updated"
+    }
   }
 }

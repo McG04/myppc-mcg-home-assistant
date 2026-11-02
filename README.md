@@ -1,4 +1,4 @@
-# myPPC (McG) 0.2.2 — integrare Home Assistant
+# myPPC (McG) 0.2.3 — integrare Home Assistant
 
 Integrare nativă în `custom_components`, fără aplicație/add-on separat, fără
 server, VNC, token API local sau port nou. Utilizatorul și parola sunt păstrate
@@ -95,3 +95,7 @@ headless, citirea portalului și cei opt senzori Home Assistant. Cazul PPC
 `Rows: null` pentru lista fără facturi restante este tratat ca listă goală,
 fără a înlocui soldul net cu zero. Dacă PPC cere o provocare suplimentară,
 citirea se oprește și nu se afișează un sold fals.
+
+## Versiunea 0.2.3
+
+Corectează traducerea engleză de rezervă (`translations/en.json`). Traducerea română este păstrată.
