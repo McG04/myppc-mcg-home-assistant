@@ -1,4 +1,4 @@
-# myPPC (McG) 0.2.3 — integrare Home Assistant
+# myPPC (McG) 0.2.4 — integrare Home Assistant
 
 Integrare nativă în `custom_components`, fără aplicație/add-on separat, fără
 server, VNC, token API local sau port nou. Utilizatorul și parola sunt păstrate
@@ -39,8 +39,11 @@ rămâne vizibilă. O respingere explicită a parolei cere reautentificare.
 
 Un timeout după trimiterea formularului nu înseamnă că sesiunea a expirat.
 Versiunile anterioare clasificau și acest caz drept eroare de autentificare.
-Formularul de reautentificare confirma doar salvarea datelor, fără a valida
-conectarea la PPC.
+Reautentificarea verifică acum utilizatorul și parola printr-un login real în
+portal înainte de salvare. Dacă parola este greșită, browserul lipsește sau
+portalul nu confirmă conectarea, datele existente nu sunt modificate.
+Reautentificarea păstrează codul de plată, istoricul și aceeași integrare;
+nu citește facturile și plățile în timpul validării parolei.
 
 ## Instalare
 
@@ -59,24 +62,45 @@ conectarea la PPC.
 3. Setări → Dispozitive și servicii → Adaugă integrare → **myPPC (McG)**.
 4. Introdu e-mailul/telefonul și parola myPPC. Codul de plată este opțional
    dacă în cont există un singur loc de consum; în celelalte cazuri specifică-l.
-5. Prima pregătire poate dura câteva minute. După prima citire apar senzorii:
+5. Asigură în prealabil browserul și driverul conform secțiunii următoare.
+   După prima citire apar senzorii:
    Sold net, De plată, Avans disponibil, Ultima factură, Ultima plată,
    Istoric facturi, Istoric plăți și Ultima citire. Cei doi senzori de istoric
    expun în atribute toate datele importate din portal.
 
-## Browserul intern
+## Chromium și chromedriver furnizate de administrator
 
-Selenium este o dependență Python a integrării. Dacă Chromium și chromedriver
-nu există deja, integrarea încearcă pregătirea unui runtime Alpine izolat în
-`/config/.storage/myppc_local/runtime`, folosind `apk`, repository-urile și
-cheile deja considerate de încredere în imaginea Core. Nu modifică pachetele
-sistemului Core și nu cere mod privilegiat ori Protection mode dezactivat.
+Integrarea necesită **Chromium și chromedriver deja instalate în același mediu
+în care rulează procesul Home Assistant**. Caută `chromium` (sau
+`chromium-browser`) și `chromedriver` în `PATH`. Versiunile browserului și ale
+driverului trebuie să fie compatibile; folosește perechea oferită de aceeași
+distribuție. Selenium rămâne o dependență Python declarată în manifest.
 
-Runtime-ul poate ocupa câteva sute de MB, este păstrat între reporniri și este
-folosit doar la verificarea zilnică. Sunt vizate HA OS/Core Alpine aarch64 și
-amd64. Dacă `apk` sau cheile lipsesc, pregătirea se oprește cu eroare explicită.
-Compatibilitatea exactă a browserului cu imaginea Core trebuie verificată pe Pi.
-Chromium rulează fără sandbox propriu în containerul Core.
+Integrarea nu descarcă și nu instalează pachete de sistem, nu copiază chei sau
+repository-uri APK și nu creează ori execută scripturi wrapper pentru browser.
+Dacă unul dintre executabile lipsește, citirea se oprește cu un mesaj explicit.
+Nu se încearcă instalarea automată sau Selenium Manager pentru descărcarea driverului.
+
+- **Home Assistant Core pe Linux:** administratorul instalează Chromium și
+  chromedriver prin managerul distribuției înainte de configurarea integrării.
+  Pe Debian, pachetele sunt `chromium` și `chromium-driver`. Executabilele
+  trebuie să fie accesibile utilizatorului serviciului Home Assistant.
+- **Home Assistant Container:** browserul și driverul trebuie incluse de
+  administrator în imaginea containerului, la construirea imaginii, împreună
+  cu bibliotecile necesare. Instalarea lor doar pe gazda Docker nu le face
+  disponibile în container. Verifică din container, cu utilizatorul HA,
+  comenzile `chromium --version` și `chromedriver --version`.
+- **Home Assistant OS standard:** această versiune nu asigură automat browserul
+  în containerul Core. Instalarea lui într-un terminal/add-on separat nu îl
+  face accesibil integrării. O instalare HA OS fără executabilele necesare în
+  Core nu este suportată de acest mod de autentificare; folosește un mediu
+  Core/Container administrat în care poți furniza dependențele în prealabil.
+
+Versiunile vechi puteau crea `.storage/myppc_local/runtime/alpine-browser`.
+Noua versiune nu utilizează acel runtime și nu șterge automat fișierele lui.
+Istoricul și configurarea existente sunt păstrate. Profilurile temporare ale
+browserului sunt eliminate după fiecare login, inclusiv după reautentificare.
+Chromium rulează headless, fără sandbox propriu, în mediul Home Assistant.
 
 Datele de conectare și istoricul local intră în backup-urile HA care includ
 configurația. Pachetul nu conține parole, cookie-uri sau date din contul tău.
@@ -90,8 +114,11 @@ necesar browserul intern pentru login.
 
 Au fost verificate local parsarea sumelor, soldul negativ, restul individual,
 metodele OP/APP, duplicatele, persistența istoricului și reîncărcarea manuală.
-Pe sistemul țintă au fost validate instalarea runtime-ului Alpine, loginul
-headless, citirea portalului și cei opt senzori Home Assistant. Cazul PPC
+Validările vechi ale runtime-ului instalat automat nu confirmă disponibilitatea
+browserului în noua versiune: administratorul trebuie să furnizeze executabilele.
+Testele de regresie acoperă lipsa browserului, validarea reautentificării,
+păstrarea datelor și eliminarea profilului temporar. Aceste teste folosesc
+dubluri de test pentru portal și nu confirmă un login live. Cazul PPC
 `Rows: null` pentru lista fără facturi restante este tratat ca listă goală,
 fără a înlocui soldul net cu zero. Dacă PPC cere o provocare suplimentară,
 citirea se oprește și nu se afișează un sold fals.
@@ -99,3 +126,10 @@ citirea se oprește și nu se afișează un sold fals.
 ## Versiunea 0.2.3
 
 Corectează traducerea engleză de rezervă (`translations/en.json`). Traducerea română este păstrată.
+
+
+## Versiunea 0.2.4
+
+Elimină instalatorul de pachete de sistem. Folosește numai Chromium și
+chromedriver furnizate în prealabil de administrator și validează parola
+în portal înainte de salvarea datelor de reautentificare.

@@ -72,7 +72,7 @@ class LoginTests(unittest.TestCase):
             webdriver=webdriver, Service=MagicMock(),
             By=types.SimpleNamespace(TAG_NAME='tag', CSS_SELECTOR='css'),
             WebDriverWait=MagicMock(return_value=wait), TimeoutException=TimeoutException,
-            browser_binaries=lambda directory: ('chrome', 'driver'),
+            browser_binaries=lambda: ('chrome', 'driver'),
             merge_records=MagicMock(), rows=MagicMock(), normalize=MagicMock()))
         return scope, driver
 
@@ -138,3 +138,4 @@ class SetupTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
