@@ -42,7 +42,7 @@ class Portal:
         self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.jar))
 
     def login(self):
-        chrome, driver_binary = browser_binaries(self.directory)
+        chrome, driver_binary = browser_binaries()
         with tempfile.TemporaryDirectory(prefix='profile-', dir=self.directory) as profile:
             options = webdriver.ChromeOptions()
             options.binary_location = chrome
@@ -179,3 +179,4 @@ class Portal:
                     latest_payment=data['payments'][0] if data['payments'] else None,
                     latest_invoice_detail={})
         return data
+

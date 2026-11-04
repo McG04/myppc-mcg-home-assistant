@@ -3,17 +3,28 @@
     "step": {
       "user": {
         "title": "Connect to myPPC",
-        "description": "The integration stores your credentials locally. It signs in and reads the portal daily at 08:00 in the Home Assistant time zone. The first startup prepares the internal browser and may take a few minutes. The payment code is optional if there is only one consumption point.",
+        "description": "The integration stores your credentials locally and reads the portal daily at 08:00 in the Home Assistant time zone. Chromium and chromedriver must already be available in the Home Assistant environment; see the README. The payment code is optional if there is only one consumption point.",
         "data": {
           "username": "Email or phone (+40)",
           "password": "myPPC password",
           "payment_code": "Payment code (optional)"
         }
+      },
+      "reauth_confirm": {
+        "title": "Reauthenticate myPPC",
+        "description": "Enter the credentials for the same account. They are checked against the portal before being saved. The payment code and history are kept.",
+        "data": {
+          "username": "Email or phone (+40)",
+          "password": "myPPC password"
+        }
       }
     },
     "error": {
-      "invalid_auth": "Enter your username and password",
-      "invalid_code": "The payment code must contain only digits"
+      "invalid_auth": "Incorrect or missing username or password",
+      "invalid_code": "The payment code must contain only digits",
+      "cannot_connect": "The portal could not confirm login. Saved credentials were not changed.",
+      "browser_unavailable": "Chromium and chromedriver must already be installed in the Home Assistant environment. See the README.",
+      "wrong_account": "Use the same account as the existing integration"
     },
     "abort": {
       "already_configured": "The account is already configured",

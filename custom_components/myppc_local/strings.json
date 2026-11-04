@@ -1,7 +1,34 @@
 {
   "config": {
-    "step": {"user": {"title": "Conectare myPPC", "description": "Integrarea păstrează local datele de conectare. Se autentifică și citește portalul zilnic la ora 08:00, în fusul orar Home Assistant. Prima pornire pregătește browserul intern și poate dura câteva minute. Codul de plată este opțional dacă există un singur loc de consum.", "data": {"username": "E-mail sau telefon (+40)", "password": "Parolă myPPC", "payment_code": "Cod de plată (opțional)"}}},
-    "error": {"invalid_auth": "Completează utilizatorul și parola", "invalid_code": "Codul de plată trebuie să conțină numai cifre"},
-    "abort": {"already_configured": "Contul este deja configurat", "reauth_successful": "Datele au fost actualizate"}
+    "step": {
+      "user": {
+        "title": "Conectare myPPC",
+        "description": "Integrarea păstrează local datele de conectare și citește portalul zilnic la ora 08:00, în fusul orar Home Assistant. Chromium și chromedriver trebuie să existe deja în mediul Home Assistant; consultă README. Codul de plată este opțional dacă există un singur loc de consum.",
+        "data": {
+          "username": "E-mail sau telefon (+40)",
+          "password": "Parolă myPPC",
+          "payment_code": "Cod de plată (opțional)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reautentificare myPPC",
+        "description": "Introdu datele de conectare pentru același cont. Sunt verificate în portal înainte de salvare. Codul de plată și istoricul sunt păstrate.",
+        "data": {
+          "username": "E-mail sau telefon (+40)",
+          "password": "Parolă myPPC"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Utilizator sau parolă incorectă ori necompletată",
+      "invalid_code": "Codul de plată trebuie să conțină numai cifre",
+      "cannot_connect": "Portalul nu a putut confirma conectarea. Datele salvate nu au fost modificate.",
+      "browser_unavailable": "Chromium și chromedriver trebuie instalate în prealabil în mediul Home Assistant. Consultă README.",
+      "wrong_account": "Folosește același cont ca în integrarea existentă"
+    },
+    "abort": {
+      "already_configured": "Contul este deja configurat",
+      "reauth_successful": "Datele au fost actualizate"
+    }
   }
 }

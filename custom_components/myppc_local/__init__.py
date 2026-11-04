@@ -46,7 +46,7 @@ class Coordinator(DataUpdateCoordinator):
                 pass
             # HA's local clock listener schedules collection at 08:00.
             # This file records diagnostics only; it does not schedule retries.
-            browser_binaries(self.runtime)
+            browser_binaries()
             gate.reserve()
             try:
                 api = Portal(self.runtime, self.entry.data['username'], self.entry.data['password'],
@@ -105,3 +105,4 @@ async def async_unload_entry(hass, entry):
         hass.data[DOMAIN].pop(entry.entry_id)
         return True
     return False
+
