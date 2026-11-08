@@ -2,11 +2,13 @@
 import hashlib
 import http.cookiejar
 import json
+import re
 import tempfile
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+from time import sleep
 from selenium.common.exceptions import TimeoutException
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -18,6 +20,12 @@ from .models import rows, normalize
 
 ROOT = 'https://myppc.ppcenergy.ro'
 ENDPOINT = ROOT + '/bff/api/soap'
+LOGIN_RETRY_DELAYS = (5, 10)
+CAPTCHA_ERROR = re.compile(
+    r'(?:eroare|eșuat|invalid|eșec|error|failed|failure)[^.!?\n]{0,60}captcha'
+    r'|captcha[^.!?\n]{0,60}(?:eroare|eșuat|invalid|eșec|error|failed|failure)',
+    re.IGNORECASE,
+)
 # Public client routing value shipped in the portal JS, not a credential.
 CLIENT_UUID = 'e59080c8-7aa0-11f1-ab07-0242ac120002'
 READ_METHODS = {'ConsumptionLocationsAssociatedV2', 'InvoicesListV4', 'PaymentsList',
@@ -43,6 +51,19 @@ class Portal:
         self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.jar))
 
     def login(self):
+        for delay in (*LOGIN_RETRY_DELAYS, None):
+            try:
+                self._login_once()
+                return
+            except TimeoutException as exc:
+                if delay is None:
+                    raise PortalError(
+                        'PPC nu a confirmat autentificarea după 3 încercări; '
+                        'datele salvate sunt păstrate. Următoarea citire programată este la 08:00'
+                    ) from exc
+                sleep(delay)
+
+    def _login_once(self):
         chrome, driver_binary, env = browser_binaries(self.runtime)
         with tempfile.TemporaryDirectory(prefix='profile-', dir=self.directory) as profile:
             options = webdriver.ChromeOptions()
@@ -86,7 +107,6 @@ class Portal:
                                bool(d.find_elements(By.CSS_SELECTOR,
                                                     'a[href="/facturi-si-plati"]')))
                 except TimeoutException as exc:
-                    # A visible challenge is not solved, and the login is not retried.
                     notices = []
                     selectors = ('[role="alert"]', 'mat-error', '.error-message',
                                  '.toast-message', '.snackbar')
@@ -108,11 +128,17 @@ class Portal:
                         raise LoginRequired(
                             'PPC a respins datele de autentificare'
                         ) from exc
-                    raise PortalError(
-                        'PPC nu a confirmat autentificarea în 40 de secunde; '
-                        'datele salvate sunt păstrate. Următoarea încercare '
-                        'automată este la ora 08:00'
-                    ) from exc
+                    body = driver.find_element(By.TAG_NAME, 'body').text
+                    if CAPTCHA_ERROR.search(body) or any(
+                        frame.is_displayed() for frame in driver.find_elements(
+                            By.CSS_SELECTOR, 'iframe[src*="/recaptcha/"][src*="/bframe"]'
+                        )
+                    ):
+                        raise PortalError(
+                            'PPC a afișat o eroare sau o verificare CAPTCHA; '
+                            'citirea a fost oprită și datele salvate sunt păstrate'
+                        ) from exc
+                    raise
                 for cookie in driver.get_cookies():
                     self.jar.set_cookie(http.cookiejar.Cookie(version=0, name=cookie['name'],
                         value=cookie['value'], port=None, port_specified=False,

@@ -7,7 +7,7 @@ from pathlib import Path
 import tempfile
 import types
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1] / 'custom_components/myppc_local'
@@ -44,7 +44,7 @@ class TimeoutException(Exception):
 
 
 class LoginTests(unittest.TestCase):
-    def portal_scope(self, notice):
+    def portal_scope(self, notice, *, attempts=3, succeeds=False, captcha=False):
         driver = MagicMock()
         driver.current_url = 'https://myppc.ppcenergy.ro/autentificare'
         username, password, button = MagicMock(), MagicMock(), MagicMock()
@@ -55,6 +55,7 @@ class LoginTests(unittest.TestCase):
         alert = MagicMock()
         alert.text = notice
         alert.is_displayed.return_value = True
+        driver.find_element.return_value.text = notice
         def elements(by, selector):
             if selector == 'input':
                 return [username, password]
@@ -62,27 +63,51 @@ class LoginTests(unittest.TestCase):
                 return [button]
             if selector == '[role="alert"]' and notice:
                 return [alert]
+            if '/bframe' in selector and captcha:
+                return [alert]
             return []
         driver.find_elements.side_effect = elements
         webdriver = MagicMock()
         webdriver.Chrome.return_value = driver
         wait = MagicMock()
-        wait.until.side_effect = [True, TimeoutException()]
+        wait.until.side_effect = [True, TimeoutException()] * attempts
+        if succeeds:
+            wait.until.side_effect = [True, TimeoutException()] * (attempts - 1) + [True, True]
+        driver.get_cookies.return_value = []
         scope = load_source('portal.py', dict(
             webdriver=webdriver, Service=MagicMock(),
             By=types.SimpleNamespace(TAG_NAME='tag', CSS_SELECTOR='css'),
             WebDriverWait=MagicMock(return_value=wait), TimeoutException=TimeoutException,
             browser_binaries=lambda runtime: ('chrome', 'driver', None),
             merge_records=MagicMock(), rows=MagicMock(), normalize=MagicMock()))
+        scope['sleep'] = MagicMock()
         return scope, driver
 
     def test_timeout_does_not_request_new_credentials(self):
-        scope, driver = self.portal_scope('')
+        scope, driver = self.portal_scope('This site is protected by reCAPTCHA.')
         with tempfile.TemporaryDirectory() as directory:
             portal = scope['Portal'](directory, 'test', 'secret')
             with self.assertRaises(scope['PortalError']):
                 portal.login()
-        driver.quit.assert_called_once()
+        self.assertEqual(driver.quit.call_count, 3)
+        self.assertEqual(scope['sleep'].call_args_list, [call(5), call(10)])
+
+    def test_login_can_succeed_after_a_timeout(self):
+        scope, driver = self.portal_scope('', attempts=2, succeeds=True)
+        with tempfile.TemporaryDirectory() as directory:
+            scope['Portal'](directory, 'test', 'secret').login()
+        self.assertEqual(driver.quit.call_count, 2)
+        scope['sleep'].assert_called_once_with(5)
+
+    def test_captcha_error_or_challenge_stops_the_retry(self):
+        for notice, challenge in [('Eroare la validarea reCAPTCHA', False), ('', True)]:
+            with self.subTest(notice=notice, challenge=challenge):
+                scope, driver = self.portal_scope(notice, captcha=challenge)
+                with tempfile.TemporaryDirectory() as directory:
+                    with self.assertRaisesRegex(scope['PortalError'], 'CAPTCHA'):
+                        scope['Portal'](directory, 'test', 'secret').login()
+                driver.quit.assert_called_once()
+                scope['sleep'].assert_not_called()
 
     def test_explicit_password_rejection_requests_reauth(self):
         scope, driver = self.portal_scope('Parolă incorectă')
@@ -90,6 +115,7 @@ class LoginTests(unittest.TestCase):
             with self.assertRaises(scope['LoginRequired']):
                 scope['Portal'](directory, 'test', 'secret').login()
         driver.quit.assert_called_once()
+        scope['sleep'].assert_not_called()
 
 
 class FakeCoordinator:

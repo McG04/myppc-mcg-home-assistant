@@ -1,4 +1,4 @@
-# myPPC (McG) 0.2.5 — integrare Home Assistant
+# myPPC (McG) 0.2.6 — integrare Home Assistant
 
 Integrare nativă în `custom_components`, fără aplicație/add-on separat, fără
 server, VNC, token API local sau port nou. Utilizatorul și parola sunt păstrate
@@ -34,7 +34,9 @@ integrarea afișează imediat istoricul salvat. Dacă cea mai recentă citire de
 la 08:00 a fost ratată, încearcă în fundal să o recupereze. O încercare deja
 înregistrată este urmată de citirea de la următoarea oră 08:00. Prima
 instalare fără istoric face o citire imediată. Datele vechi sunt păstrate, iar ultima citire reușită
-rămâne vizibilă. O respingere explicită a parolei cere reautentificare.
+rămâne vizibilă. O respingere explicită a parolei cere reautentificare. Un timeout de
+autentificare poate fi urmat de două încercări, după 5 și 10 secunde. O eroare
+sau o verificare CAPTCHA afișată de portal oprește încercările.
 
 Un timeout după trimiterea formularului nu înseamnă că sesiunea a expirat.
 Versiunile anterioare clasificau și acest caz drept eroare de autentificare.
