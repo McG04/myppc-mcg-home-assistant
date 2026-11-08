@@ -1,4 +1,4 @@
-# myPPC (McG) 0.2.4 — integrare Home Assistant
+# myPPC (McG) 0.2.5 — integrare Home Assistant
 
 Integrare nativă în `custom_components`, fără aplicație/add-on separat, fără
 server, VNC, token API local sau port nou. Utilizatorul și parola sunt păstrate
@@ -29,12 +29,11 @@ observată; nu poate distinge corecții ale unor tranzacții perfect identice.
 Browserul este închis după login, iar sesiunea temporară este ștearsă după
 copierea cookie-urilor numai în memoria procesului. Nu ține sesiunea activă
 artificial și nu face trafic PPC între verificările programate. Coordinatorul
-Home Assistant programează o citire pe zi. La repornire/reîncărcare se
-restaurează istoricul salvat, fără o nouă autentificare. Dacă HA este oprit la
-08:00, următoarea citire este în dimineața următoare. Numai prima instalare
-fără istoric face o citire imediată. Erorile temporare nu declanșează
-reautentificarea și nu provoacă încercări repetate în cursul zilei; următoarea
-încercare este la 08:00. Datele vechi sunt păstrate, iar ultima citire reușită
+Home Assistant programează o citire pe zi. La repornire sau reîncărcare,
+integrarea afișează imediat istoricul salvat. Dacă cea mai recentă citire de
+la 08:00 a fost ratată, încearcă în fundal să o recupereze. O încercare deja
+înregistrată este urmată de citirea de la următoarea oră 08:00. Prima
+instalare fără istoric face o citire imediată. Datele vechi sunt păstrate, iar ultima citire reușită
 rămâne vizibilă. O respingere explicită a parolei cere reautentificare.
 
 Un timeout după trimiterea formularului nu înseamnă că sesiunea a expirat.
@@ -70,9 +69,10 @@ nu citește facturile și plățile în timpul validării parolei.
 
 ## Chromium și chromedriver furnizate de administrator
 
-Integrarea necesită **Chromium și chromedriver deja instalate în același mediu
-în care rulează procesul Home Assistant**. Caută `chromium` (sau
-`chromium-browser`) și `chromedriver` în `PATH`. Versiunile browserului și ale
+Integrarea necesită **Chromium și chromedriver deja disponibile pentru
+procesul Home Assistant**. Caută întâi `chromium` (sau `chromium-browser`)
+și `chromedriver` în `PATH`. Dacă perechea lipsește, caută executabilele
+existente în `.storage/myppc_local/runtime/alpine-browser`. Versiunile browserului și ale
 driverului trebuie să fie compatibile; folosește perechea oferită de aceeași
 distribuție. Selenium rămâne o dependență Python declarată în manifest.
 
@@ -90,14 +90,13 @@ Nu se încearcă instalarea automată sau Selenium Manager pentru descărcarea d
   cu bibliotecile necesare. Instalarea lor doar pe gazda Docker nu le face
   disponibile în container. Verifică din container, cu utilizatorul HA,
   comenzile `chromium --version` și `chromedriver --version`.
-- **Home Assistant OS standard:** această versiune nu asigură automat browserul
-  în containerul Core. Instalarea lui într-un terminal/add-on separat nu îl
-  face accesibil integrării. O instalare HA OS fără executabilele necesare în
-  Core nu este suportată de acest mod de autentificare; folosește un mediu
-  Core/Container administrat în care poți furniza dependențele în prealabil.
+- **Home Assistant OS:** instalările existente pot folosi perechea Alpine
+  păstrată în directorul de mai sus, dacă executabilele și bibliotecile sunt
+  încă compatibile cu Core. Integrarea pornește executabilele direct, cu
+  bibliotecile locale, fără scripturile vechi. O instalare HA OS nouă are
+  nevoie de o pereche disponibilă procesului Core. Pachetele instalate doar
+  într-un add-on separat nu apar în containerul Core.
 
-Versiunile vechi puteau crea `.storage/myppc_local/runtime/alpine-browser`.
-Noua versiune nu utilizează acel runtime și nu șterge automat fișierele lui.
 Istoricul și configurarea existente sunt păstrate. Profilurile temporare ale
 browserului sunt eliminate după fiecare login, inclusiv după reautentificare.
 Chromium rulează headless, fără sandbox propriu, în mediul Home Assistant.
@@ -114,8 +113,6 @@ necesar browserul intern pentru login.
 
 Au fost verificate local parsarea sumelor, soldul negativ, restul individual,
 metodele OP/APP, duplicatele, persistența istoricului și reîncărcarea manuală.
-Validările vechi ale runtime-ului instalat automat nu confirmă disponibilitatea
-browserului în noua versiune: administratorul trebuie să furnizeze executabilele.
 Testele de regresie acoperă lipsa browserului, validarea reautentificării,
 păstrarea datelor și eliminarea profilului temporar. Aceste teste folosesc
 dubluri de test pentru portal și nu confirmă un login live. Cazul PPC
@@ -133,3 +130,9 @@ Corectează traducerea engleză de rezervă (`translations/en.json`). Traducerea
 Elimină instalatorul de pachete de sistem. Folosește numai Chromium și
 chromedriver furnizate în prealabil de administrator și validează parola
 în portal înainte de salvarea datelor de reautentificare.
+
+
+## Versiunea 0.2.5
+
+Recunoaște o pereche locală Chromium și ChromeDriver deja instalată și
+recuperează citirea zilnică ratată la repornire sau reîncărcare.

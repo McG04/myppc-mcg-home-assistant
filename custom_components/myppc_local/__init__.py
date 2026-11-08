@@ -1,14 +1,16 @@
 """Native HA integration with one daily portal check and an internal login browser."""
+from datetime import datetime, timedelta
 import json
 import logging
 from pathlib import Path
 import threading
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from zoneinfo import ZoneInfo
 from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from .daily import DailyGate
 from .portal import Portal, LoginRequired
-from .browser_runtime import browser_binaries, BrowserUnavailable
+from .browser_runtime import BrowserUnavailable
 
 DOMAIN = 'myppc_local'
 _LOGGER = logging.getLogger(__name__)
@@ -30,6 +32,26 @@ class Coordinator(DataUpdateCoordinator):
             return None
         return data if isinstance(data, dict) and data.get('updated_at') else None
 
+    def _daily_gate(self):
+        return DailyGate(
+            self.directory / 'schedule.json', self.entry.unique_id, self.hass.config.time_zone
+        )
+
+    def catchup_due(self, cached):
+        """Recover a missed daily check once without discarding the cached readings."""
+        now = datetime.now(ZoneInfo(self.hass.config.time_zone))
+        cutoff = now.replace(hour=8, minute=0, second=0, microsecond=0)
+        if now < cutoff:
+            cutoff -= timedelta(days=1)
+        try:
+            updated = datetime.fromisoformat(cached['updated_at'])
+            if updated.tzinfo is not None and updated >= cutoff:
+                return False
+        except (TypeError, ValueError):
+            pass
+        last_attempt = self._daily_gate().last_attempt
+        return last_attempt is None or last_attempt < cutoff.timestamp()
+
     async def async_daily_refresh(self, now):
         """One fresh login and collection at 08:00 in HA's local timezone."""
         await self.async_refresh()
@@ -37,7 +59,7 @@ class Coordinator(DataUpdateCoordinator):
     def _blocking_update(self):
         with self.lock:
             self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-            gate = DailyGate(self.directory / 'schedule.json', self.entry.unique_id, self.hass.config.time_zone)
+            gate = self._daily_gate()
             cache = self.directory / 'history.json'
             previous = None
             try:
@@ -46,11 +68,10 @@ class Coordinator(DataUpdateCoordinator):
                 pass
             # HA's local clock listener schedules collection at 08:00.
             # This file records diagnostics only; it does not schedule retries.
-            browser_binaries()
             gate.reserve()
             try:
                 api = Portal(self.runtime, self.entry.data['username'], self.entry.data['password'],
-                             self.entry.data.get('payment_code',''))
+                             self.entry.data.get('payment_code',''), runtime=self.runtime)
                 data = api.fetch(previous)
                 temp = cache.with_suffix('.tmp')
                 temp.write_text(json.dumps(data, ensure_ascii=False))
@@ -58,6 +79,9 @@ class Coordinator(DataUpdateCoordinator):
                 temp.replace(cache)
                 gate.set_status('ok')
                 return data
+            except BrowserUnavailable:
+                gate.set_status('browser_unavailable')
+                raise
             except LoginRequired:
                 gate.set_status('login_required')
                 raise
@@ -97,6 +121,8 @@ async def async_setup_entry(hass, entry):
     entry.async_on_unload(async_track_time_change(
         hass, coordinator.async_daily_refresh, hour=8, minute=0, second=0
     ))
+    if cached is not None and await hass.async_add_executor_job(coordinator.catchup_due, cached):
+        entry.async_create_background_task(hass, coordinator.async_refresh(), 'myPPC catch-up')
     return True
 
 

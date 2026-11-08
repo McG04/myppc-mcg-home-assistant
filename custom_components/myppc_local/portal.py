@@ -35,14 +35,15 @@ class PortalError(Exception):
 
 
 class Portal:
-    def __init__(self, directory, username, password, payment_code=''):
+    def __init__(self, directory, username, password, payment_code='', *, runtime=None):
         self.directory = Path(directory)
+        self.runtime = runtime
         self.username, self.password, self.payment_code = username, password, payment_code
         self.jar = http.cookiejar.CookieJar()
         self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.jar))
 
     def login(self):
-        chrome, driver_binary = browser_binaries()
+        chrome, driver_binary, env = browser_binaries(self.runtime)
         with tempfile.TemporaryDirectory(prefix='profile-', dir=self.directory) as profile:
             options = webdriver.ChromeOptions()
             options.binary_location = chrome
@@ -50,7 +51,7 @@ class Portal:
                            '--no-first-run','--no-default-browser-check','--disable-background-networking',
                            '--disable-component-update','--disable-sync',f'--user-data-dir={profile}']:
                 options.add_argument(option)
-            driver = webdriver.Chrome(service=Service(driver_binary), options=options)
+            driver = webdriver.Chrome(service=Service(driver_binary, env=env), options=options)
             try:
                 driver.set_page_load_timeout(60)
                 driver.get(ROOT + '/autentificare')

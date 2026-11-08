@@ -1,7 +1,7 @@
 """Regression tests without downloading HA or launching a real browser."""
 import ast
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 from pathlib import Path
 import tempfile
@@ -72,7 +72,7 @@ class LoginTests(unittest.TestCase):
             webdriver=webdriver, Service=MagicMock(),
             By=types.SimpleNamespace(TAG_NAME='tag', CSS_SELECTOR='css'),
             WebDriverWait=MagicMock(return_value=wait), TimeoutException=TimeoutException,
-            browser_binaries=lambda: ('chrome', 'driver'),
+            browser_binaries=lambda runtime: ('chrome', 'driver', None),
             merge_records=MagicMock(), rows=MagicMock(), normalize=MagicMock()))
         return scope, driver
 
@@ -99,32 +99,55 @@ class FakeCoordinator:
         self.first_refreshes = 0
     async def async_config_entry_first_refresh(self):
         self.first_refreshes += 1
+    async def async_refresh(self):
+        pass
+
     def async_set_updated_data(self, data):
         self.data = data
 
 
 class SetupTests(unittest.IsolatedAsyncioTestCase):
-    async def test_restart_restores_cache_and_schedules_only_eight(self):
+    async def test_restart_with_current_cache_schedules_only_eight(self):
+        await self.check_restart(stale=False)
+
+    async def test_restart_catches_up_a_missed_reading(self):
+        await self.check_restart(stale=True)
+
+    async def test_restart_does_not_repeat_todays_failed_attempt(self):
+        await self.check_restart(stale=True, attempted=True)
+
+    async def check_restart(self, *, stale, attempted=False):
         tracker = MagicMock(return_value=lambda: None)
         scope = load_source('__init__.py', dict(
             ConfigEntryAuthFailed=type('AuthError', (Exception,), {}),
             async_track_time_change=tracker, DataUpdateCoordinator=FakeCoordinator,
-            UpdateFailed=type('UpdateFailed', (Exception,), {}), DailyGate=MagicMock(),
+            UpdateFailed=type('UpdateFailed', (Exception,), {}),
+            DailyGate=load_source('daily.py', {})['DailyGate'],
             Portal=MagicMock(), LoginRequired=type('LoginRequired', (Exception,), {}),
             browser_binaries=MagicMock(), BrowserUnavailable=type('BrowserUnavailable', (Exception,), {})))
         with tempfile.TemporaryDirectory() as directory:
-            async def executor(fn):
-                return fn()
+            async def executor(fn, *args):
+                return fn(*args)
             async def forward(*args):
                 pass
             hass = types.SimpleNamespace(data={},
-                config=types.SimpleNamespace(path=lambda *parts: str(Path(directory).joinpath(*parts))),
+                config=types.SimpleNamespace(time_zone='Europe/Bucharest',
+                    path=lambda *parts: str(Path(directory).joinpath(*parts))),
                 async_add_executor_job=executor,
                 config_entries=types.SimpleNamespace(async_forward_entry_setups=forward))
-            entry = types.SimpleNamespace(entry_id='test', async_on_unload=MagicMock())
+            def track_background(hass, coro, name):
+                coro.close()
+
+            entry = types.SimpleNamespace(entry_id='test', unique_id='test',
+                async_on_unload=MagicMock(), async_create_background_task=MagicMock(
+                    side_effect=track_background))
             path = Path(directory) / '.storage/myppc_local/test/history.json'
             path.parent.mkdir(parents=True)
-            saved = {'updated_at': '2026-11-01T06:00:00Z', 'balance': 12}
+            now = datetime.now(ZoneInfo('Europe/Bucharest'))
+            updated = now - timedelta(days=7) if stale else now
+            saved = {'updated_at': updated.isoformat(), 'balance': 12}
+            if attempted:
+                scope['DailyGate'](path.with_name('schedule.json'), 'test').reserve(now.timestamp())
             path.write_text(json.dumps(saved))
             await scope['async_setup_entry'](hass, entry)
             coordinator = hass.data['myppc_local']['test']
@@ -134,6 +157,10 @@ class SetupTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(tracker.call_args.kwargs, {'hour': 8, 'minute': 0, 'second': 0})
             entry.async_on_unload.assert_called_once()
             scope['Portal'].assert_not_called()
+            if stale and not attempted:
+                entry.async_create_background_task.assert_called_once()
+            else:
+                entry.async_create_background_task.assert_not_called()
 
 
 if __name__ == '__main__':

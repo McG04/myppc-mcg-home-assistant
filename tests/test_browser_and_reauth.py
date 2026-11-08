@@ -18,15 +18,31 @@ class BrowserTests(unittest.TestCase):
             with patch.object(scope['shutil'], 'which', side_effect=lambda name: {
                 'chromium': '/usr/bin/chromium', 'chromedriver': '/usr/bin/chromedriver'
             }.get(name)):
-                self.assertEqual(scope['browser_binaries'](), ('/usr/bin/chromium', '/usr/bin/chromedriver'))
+                self.assertEqual(scope['browser_binaries'](), ('/usr/bin/chromium', '/usr/bin/chromedriver', None))
             self.assertEqual(list(Path(directory).iterdir()), [])
 
-    def test_missing_pair_fails_and_never_uses_the_old_alpine_runtime(self):
+    def test_missing_pair_fails_without_a_preprovisioned_runtime(self):
         scope = load_source('browser_runtime.py', {})
         for available in ({}, {'chromium': '/usr/bin/chromium'}, {'chromedriver': '/usr/bin/chromedriver'}):
             with self.subTest(available=available), patch.object(scope['shutil'], 'which', side_effect=available.get):
                 with self.assertRaises(scope['BrowserUnavailable']):
                     scope['browser_binaries']()
+
+    def test_existing_alpine_pair_is_used_without_running_wrappers(self):
+        scope = load_source('browser_runtime.py', {})
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'alpine-browser'
+            expected = [root / 'usr/lib/chromium/chromium', root / 'usr/bin/chromedriver']
+            for path in expected:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.touch(mode=0o700)
+            with patch.object(scope['shutil'], 'which', return_value=None):
+                chrome, driver, env = scope['browser_binaries'](directory)
+                self.assertEqual([Path(chrome), Path(driver)], expected)
+                self.assertIn(str(root / 'usr/lib'), env['LD_LIBRARY_PATH'])
+                expected[1].chmod(0o600)
+                with self.assertRaises(scope['BrowserUnavailable']):
+                    scope['browser_binaries'](directory)
 
     def test_chromium_browser_name_is_supported(self):
         scope = load_source('browser_runtime.py', {})
@@ -93,7 +109,8 @@ class ReauthTests(unittest.IsolatedAsyncioTestCase):
             return fn(*args)
 
         self.flow = self.scope['ConfigFlow']()
-        self.flow.hass = types.SimpleNamespace(async_add_executor_job=executor)
+        self.flow.hass = types.SimpleNamespace(async_add_executor_job=executor,
+            config=types.SimpleNamespace(path=lambda *parts: str(Path('/config').joinpath(*parts))))
         self.flow.entry = types.SimpleNamespace(entry_id='existing', unique_id='unchanged',
             data={'username': 'user@example.test', 'password': 'old', 'payment_code': '123'},
             options={'custom': True})
@@ -111,7 +128,7 @@ class ReauthTests(unittest.IsolatedAsyncioTestCase):
     async def test_success_validates_login_then_updates_the_existing_entry(self):
         result = await self.submit(' USER@EXAMPLE.TEST ')
         self.assertEqual(result['reason'], 'reauth_successful')
-        self.assertEqual(self.calls, [('USER@EXAMPLE.TEST', 'new')])
+        self.assertEqual(self.calls, [('USER@EXAMPLE.TEST', 'new', '/config/.storage/myppc_local/runtime')])
         self.scope['Portal'].return_value.login.assert_called_once_with()
         self.scope['Portal'].return_value.fetch.assert_not_called()
         self.assertIs(self.flow.reloaded, self.flow.entry)

@@ -13,10 +13,10 @@ from .browser_runtime import BrowserUnavailable
 from .portal import LoginRequired, Portal, PortalError
 
 
-def _validate_credentials(username, password):
+def _validate_credentials(username, password, runtime):
     """Perform a real login in an isolated profile, without fetching billing data."""
     with tempfile.TemporaryDirectory(prefix="myppc-reauth-") as directory:
-        Portal(directory, username, password).login()
+        Portal(directory, username, password, runtime=runtime).login()
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -61,7 +61,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 try:
                     await self.hass.async_add_executor_job(
-                        _validate_credentials, username, password
+                        _validate_credentials, username, password,
+                        self.hass.config.path(".storage", DOMAIN, "runtime"),
                     )
                 except LoginRequired:
                     errors['base'] = 'invalid_auth'
