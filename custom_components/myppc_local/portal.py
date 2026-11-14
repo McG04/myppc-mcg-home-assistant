@@ -37,6 +37,10 @@ class LoginRequired(Exception):
     pass
 
 
+class LoginConfirmationTimeout(TimeoutException):
+    pass
+
+
 class PortalError(Exception):
     pass
 
@@ -59,7 +63,7 @@ class Portal:
             except TimeoutException as exc:
                 if delay is None:
                     raise PortalError(
-                        'PPC nu a confirmat autentificarea după 3 încercări; '
+                        f'PPC nu a confirmat autentificarea după 3 încercări ({exc.msg if isinstance(exc, LoginConfirmationTimeout) else 'etapă neidentificată'}); '
                         'datele salvate sunt păstrate. Următoarea citire programată este la 08:00'
                     ) from exc
                 sleep(delay)
@@ -137,7 +141,22 @@ class Portal:
                             'PPC a afișat o eroare sau o verificare CAPTCHA; '
                             'citirea a fost oprită și datele salvate sunt păstrate'
                         ) from exc
-                    raise
+                    location = urlsplit(driver.current_url)
+                    route = location.path.rstrip('/')
+                    if (location.scheme, location.netloc) != ('https', 'myppc.ppcenergy.ro'):
+                        page = 'origine externă'
+                    elif route in ('/autentificare', '/acasa', '/sold-rapid', '/facturi-si-plati'):
+                        page = route
+                    else:
+                        page = 'altă pagină PPC'
+                    password_visible = any(
+                        element.is_displayed()
+                        for element in driver.find_elements(By.CSS_SELECTOR, 'input[type="password"]')
+                    )
+                    raise LoginConfirmationTimeout(
+                        f'pagină: {page}, formular vizibil: {password_visible}, '
+                        f'notificare vizibilă: {bool(notices)}'
+                    ) from exc
                 for cookie in driver.get_cookies():
                     self.jar.set_cookie(http.cookiejar.Cookie(version=0, name=cookie['name'],
                         value=cookie['value'], port=None, port_specified=False,
