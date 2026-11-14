@@ -81,6 +81,7 @@ class Portal:
             try:
                 driver.set_page_load_timeout(60)
                 driver.get(ROOT + '/autentificare')
+                driver.refresh()
                 wait = WebDriverWait(driver, 40)
                 wait.until(lambda d: any(e.is_displayed() and e.get_attribute('type')=='password'
                                          for e in d.find_elements(By.TAG_NAME,'input')))
