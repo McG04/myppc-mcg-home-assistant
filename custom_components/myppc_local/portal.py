@@ -38,7 +38,9 @@ class LoginRequired(Exception):
 
 
 class LoginConfirmationTimeout(TimeoutException):
-    pass
+    def __init__(self, context):
+        super().__init__(context)
+        self.context = context
 
 
 class PortalError(Exception):
@@ -63,7 +65,7 @@ class Portal:
             except TimeoutException as exc:
                 if delay is None:
                     raise PortalError(
-                        f'PPC nu a confirmat autentificarea după 3 încercări ({exc.msg if isinstance(exc, LoginConfirmationTimeout) else 'etapă neidentificată'}); '
+                        f'PPC nu a confirmat autentificarea după 3 încercări ({exc.context if isinstance(exc, LoginConfirmationTimeout) else 'etapă neidentificată'}); '
                         'datele salvate sunt păstrate. Următoarea citire programată este la 08:00'
                     ) from exc
                 sleep(delay)
