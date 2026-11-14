@@ -7,6 +7,7 @@ import tempfile
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
+from urllib.parse import urlsplit
 from pathlib import Path
 from time import sleep
 from selenium.common.exceptions import TimeoutException
@@ -103,9 +104,7 @@ class Portal:
                     raise LoginRequired('Buton de autentificare indisponibil')
                 buttons[0].click()
                 try:
-                    wait.until(lambda d: d.current_url.startswith(ROOT + '/acasa') or
-                               bool(d.find_elements(By.CSS_SELECTOR,
-                                                    'a[href="/facturi-si-plati"]')))
+                    wait.until(self._authenticated)
                 except TimeoutException as exc:
                     notices = []
                     selectors = ('[role="alert"]', 'mat-error', '.error-message',
@@ -149,6 +148,23 @@ class Portal:
                         comment_url=None, rest={'HttpOnly':cookie.get('httpOnly',False)}, rfc2109=False))
             finally:
                 driver.quit()
+
+    @staticmethod
+    def _authenticated(driver):
+        current = urlsplit(driver.current_url)
+        if (current.scheme, current.netloc) != ('https', 'myppc.ppcenergy.ro'):
+            return False
+        path = current.path.rstrip('/')
+        if path == '/acasa':
+            return True
+        if path == '/autentificare':
+            return False
+        return any(
+            element.is_displayed()
+            for element in driver.find_elements(
+                By.CSS_SELECTOR, 'button[aria-label="Deconectare"]'
+            )
+        )
 
     def call(self, method, data):
         if method not in READ_METHODS:
