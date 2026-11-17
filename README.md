@@ -69,35 +69,16 @@ nu citește facturile și plățile în timpul validării parolei.
    Istoric facturi, Istoric plăți și Ultima citire. Cei doi senzori de istoric
    expun în atribute toate datele importate din portal.
 
-## Chromium și chromedriver furnizate de administrator
+## Chromium și ChromeDriver
 
-Integrarea necesită **Chromium și chromedriver deja disponibile pentru
-procesul Home Assistant**. Caută întâi `chromium` (sau `chromium-browser`)
-și `chromedriver` în `PATH`. Dacă perechea lipsește, caută executabilele
-existente în `.storage/myppc_local/runtime/alpine-browser`. Versiunile browserului și ale
-driverului trebuie să fie compatibile; folosește perechea oferită de aceeași
-distribuție. Selenium rămâne o dependență Python declarată în manifest.
+Integrarea caută întâi o pereche Chromium și ChromeDriver în `PATH`, apoi
+în `.storage/myppc_local/runtime/alpine-browser`. Pe Alpine, dacă directorul
+runtime lipsește, prima citire descarcă perechea prin `apk` folosind cheile
+și depozitele configurate în containerul Core. Instalează în directorul
+integrării, fără a modifica baza de pachete a containerului Core.
 
-Integrarea nu descarcă și nu instalează pachete de sistem, nu copiază chei sau
-repository-uri APK și nu creează ori execută scripturi wrapper pentru browser.
-Dacă unul dintre executabile lipsește, citirea se oprește cu un mesaj explicit.
-Nu se încearcă instalarea automată sau Selenium Manager pentru descărcarea driverului.
-
-- **Home Assistant Core pe Linux:** administratorul instalează Chromium și
-  chromedriver prin managerul distribuției înainte de configurarea integrării.
-  Pe Debian, pachetele sunt `chromium` și `chromium-driver`. Executabilele
-  trebuie să fie accesibile utilizatorului serviciului Home Assistant.
-- **Home Assistant Container:** browserul și driverul trebuie incluse de
-  administrator în imaginea containerului, la construirea imaginii, împreună
-  cu bibliotecile necesare. Instalarea lor doar pe gazda Docker nu le face
-  disponibile în container. Verifică din container, cu utilizatorul HA,
-  comenzile `chromium --version` și `chromedriver --version`.
-- **Home Assistant OS:** instalările existente pot folosi perechea Alpine
-  păstrată în directorul de mai sus, dacă executabilele și bibliotecile sunt
-  încă compatibile cu Core. Integrarea pornește executabilele direct, cu
-  bibliotecile locale, fără scripturile vechi. O instalare HA OS nouă are
-  nevoie de o pereche disponibilă procesului Core. Pachetele instalate doar
-  într-un add-on separat nu apar în containerul Core.
+Pe alte distribuții, instalează browserul și driverul din aceeași distribuție
+în mediul în care rulează Home Assistant Core.
 
 Istoricul și configurarea existente sunt păstrate. Profilurile temporare ale
 browserului sunt eliminate după fiecare login, inclusiv după reautentificare.
@@ -138,3 +119,9 @@ chromedriver furnizate în prealabil de administrator și validează parola
 
 Recunoaște o pereche locală Chromium și ChromeDriver deja instalată și
 recuperează citirea zilnică ratată la repornire sau reîncărcare.
+
+## Versiunea 0.2.11
+
+Readuce instalarea la prima sincronizare a perechii Chromium și ChromeDriver
+din depozitele Alpine configurate în Home Assistant Core. Testarea autentificării
+myPPC pe Home Assistant OS este în curs.

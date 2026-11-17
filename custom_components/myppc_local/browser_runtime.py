@@ -1,7 +1,14 @@
-"""Find operator-provided browser binaries without installing software."""
+"""Resolve or provision a private Chromium runtime."""
 import os
 from pathlib import Path
 import shutil
+import subprocess
+from tempfile import TemporaryDirectory
+from threading import Lock
+
+_INSTALL_LOCK = Lock()
+_CHROME = Path("usr/lib/chromium/chromium")
+_DRIVER = Path("usr/bin/chromedriver")
 
 
 class BrowserUnavailable(Exception):
@@ -9,7 +16,7 @@ class BrowserUnavailable(Exception):
 
 
 def browser_binaries(runtime=None):
-    """Resolve existing executables from PATH; never download or create binaries."""
+    """Use a system pair or provision matching Alpine packages under runtime."""
     chrome = shutil.which("chromium") or shutil.which("chromium-browser")
     driver = shutil.which("chromedriver")
     if chrome and driver:
@@ -17,8 +24,11 @@ def browser_binaries(runtime=None):
 
     if runtime is not None:
         root = Path(runtime) / "alpine-browser"
-        chrome = root / "usr/lib/chromium/chromium"
-        driver = root / "usr/bin/chromedriver"
+        with _INSTALL_LOCK:
+            if not root.exists():
+                _provision(root)
+        chrome = root / _CHROME
+        driver = root / _DRIVER
         if all(path.is_file() and os.access(path, os.X_OK) for path in (chrome, driver)):
             icu_root = root / "usr/share/icu"
             icu_dirs = [path for path in icu_root.glob("*") if path.is_dir()]
@@ -33,5 +43,35 @@ def browser_binaries(runtime=None):
 
     raise BrowserUnavailable(
         "Chromium și chromedriver lipsesc din PATH și din runtime-ul local existent. "
-        "Integrarea nu instalează pachete. Consultă instrucțiunile din README."
+        "Consultă instrucțiunile din README."
     )
+
+def _provision(root):
+    """Install signed Alpine packages into a private directory before publishing it."""
+    apk = shutil.which("apk")
+    config = Path("/etc/apk")
+    if not apk or not (config / "keys").is_dir() or not (config / "repositories").is_file():
+        return
+
+    try:
+        root.parent.mkdir(parents=True, exist_ok=True)
+        with TemporaryDirectory(prefix="alpine-browser-", dir=root.parent) as directory:
+            staging = Path(directory) / "root"
+            staging_config = staging / "etc/apk"
+            staging_config.mkdir(parents=True, mode=0o700)
+            shutil.copytree(config / "keys", staging_config / "keys")
+            shutil.copyfile(config / "repositories", staging_config / "repositories")
+            subprocess.run(
+                [apk, "--root", str(staging), "--initdb", "--no-cache",
+                 "--no-scripts", "--no-progress", "add", "chromium", "chromium-chromedriver"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=900,
+                check=True,
+            )
+            if not all(path.is_file() and os.access(path, os.X_OK)
+                       for path in (staging / _CHROME, staging / _DRIVER)):
+                raise BrowserUnavailable("Pachetele Alpine nu conțin executabilele așteptate.")
+            staging.rename(root)
+    except (OSError, subprocess.SubprocessError) as err:
+        raise BrowserUnavailable("Instalarea runtime-ului Chromium din Alpine a eșuat.") from err
