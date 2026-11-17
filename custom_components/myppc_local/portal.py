@@ -207,6 +207,38 @@ class Portal:
             raise PortalError(f'Răspuns PPC neutilizabil pentru {method}')
         return result['data']
 
+    def fetch_public_balance(self, previous):
+        """Try PPC's public quick-balance read without authenticating.
+
+        This endpoint is not guaranteed to allow anonymous BFF calls.
+        Preserve invoice/payment history and reject malformed/blocked responses.
+        """
+        from .finance import summary
+
+        if not isinstance(previous, dict) or not previous.get('updated_at'):
+            raise PortalError('Istoricul existent este necesar pentru fallback')
+        code = str(self.payment_code or previous.get('payment_code') or '').strip()
+        if not code or not code.isdigit():
+            raise PortalError('Codul de plată lipsește sau este invalid')
+        if previous.get('payment_code') and str(previous['payment_code']) != code:
+            raise PortalError('Codul de plată diferă de istoricul salvat')
+        response = self.call('BalanceFromPaymentCode', {'paymentCode': code})
+        if not isinstance(response, dict) or 'balance' not in response:
+            raise PortalError('PPC nu a furnizat soldul public')
+        try:
+            amounts = summary(response['balance'])
+        except (TypeError, ValueError) as exc:
+            raise PortalError('Sold public nevalid') from exc
+        return {
+            **previous, **amounts,
+            'payment_code': code,
+            'balance_source': 'ppc_public_quick_balance_unverified',
+            'full_history_updated_at': previous.get(
+                'full_history_updated_at', previous['updated_at']
+            ),
+            'updated_at': datetime.now(timezone.utc).isoformat(),
+        }
+
     def fetch(self, previous=None):
         previous = previous or {}
         self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
