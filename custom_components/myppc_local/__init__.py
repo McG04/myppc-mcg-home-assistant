@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from .daily import DailyGate
-from .portal import Portal, LoginRequired
+from .portal import Portal, LoginRequired, PortalError
 from .browser_runtime import BrowserUnavailable
 
 DOMAIN = 'myppc_local'
@@ -79,6 +79,30 @@ class Coordinator(DataUpdateCoordinator):
                 temp.replace(cache)
                 gate.set_status('ok')
                 return data
+            except PortalError as exc:
+                # A rejected automated login must not erase the last valid data.
+                # Try PPC's documented unauthenticated balance feature only
+                # when we have an existing history and a known payment code.
+                if ('CAPTCHA' not in str(exc).upper()
+                        or not previous
+                        or not (self.entry.data.get('payment_code')
+                                or previous.get('payment_code'))):
+                    gate.set_status('collection_failed')
+                    raise
+                try:
+                    api = Portal(self.runtime, '', '',
+                                 self.entry.data.get('payment_code', ''),
+                                 runtime=self.runtime)
+                    data = api.fetch_public_balance(previous)
+                    temp = cache.with_suffix('.tmp')
+                    temp.write_text(json.dumps(data, ensure_ascii=False))
+                    temp.chmod(0o600)
+                    temp.replace(cache)
+                    gate.set_status('balance_only')
+                    return data
+                except Exception:
+                    gate.set_status('public_balance_unavailable')
+                    raise exc
             except BrowserUnavailable:
                 gate.set_status('browser_unavailable')
                 raise
